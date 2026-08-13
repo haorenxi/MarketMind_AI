@@ -1,10 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+import traceback
 
 from .graph import agent_graph
 from .schemas import AgentRequest, AgentResponse
 
 app = FastAPI(title="LangGraph Agent API", version="0.1.0")
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,10 +27,19 @@ def health_check() -> dict[str, str]:
 def run_agent(request: AgentRequest) -> AgentResponse:
     try:
         result = agent_graph.invoke({"user_input": request.message})
-        return AgentResponse(answer=result["output"], research=result["research"])
+        score = result.get("score") if isinstance(result, dict) else None
+        return AgentResponse(
+            answer=result["output"],
+            research=result["research"],
+            score=score,
+            score_status=score.get("score_status") if isinstance(score, dict) else None,
+            score_error=score.get("score_error") if isinstance(score, dict) else None,
+        )
     except Exception as error:
+        logger.exception("Agent execution failed: %s", error)
+        logger.error(traceback.format_exc())
         fallback = (
             "# Report Unavailable\n\n"
             "The research workflow failed unexpectedly, but the API stayed up."
         )
-        return AgentResponse(answer=fallback, research=fallback)
+        return AgentResponse(answer=fallback, research=fallback, score=None, score_status="fallback_scored", score_error=str(error))

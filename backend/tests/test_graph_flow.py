@@ -50,6 +50,23 @@ class FakeGraphModel:
         if "Report Generator" in prompt_text:
             return AIMessage(content="# Report\n\nFinal report")
 
+        if "Scoring Agent" in prompt_text:
+            from app.agents.scorer import ReportScore
+
+            return ReportScore(
+                score=88,
+                dimension_scores={
+                    "coverage": 90,
+                    "truthfulness": 85,
+                    "structure": 90,
+                    "actionability": 85,
+                    "citation_quality": 80,
+                },
+                issues=[],
+                improvement_suggestions=["add more citations"],
+                pass_or_fail="pass",
+            )
+
         return AIMessage(content="# Report\n\nFinal report")
 
 

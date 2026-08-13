@@ -12,3 +12,6 @@ class AgentResponse(BaseModel):
 
     answer: str
     research: str
+    score: dict | None = None
+    score_status: str | None = None
+    score_error: str | None = None

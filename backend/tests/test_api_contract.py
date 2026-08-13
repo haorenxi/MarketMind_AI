@@ -17,6 +17,13 @@ class FakeAgentGraph:
         return {
             "output": "markdown report",
             "research": "markdown report",
+            "score": {
+                "score": 88,
+                "dimension_scores": {"coverage": 90},
+                "issues": [],
+                "improvement_suggestions": [],
+                "pass_or_fail": "pass",
+            },
         }
 
 
@@ -31,7 +38,20 @@ class ApiContractTests(unittest.TestCase):
             app_main.agent_graph = original_graph
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"answer": "markdown report", "research": "markdown report"})
+        self.assertEqual(
+            response.json(),
+            {
+                "answer": "markdown report",
+                "research": "markdown report",
+                "score": {
+                    "score": 88,
+                    "dimension_scores": {"coverage": 90},
+                    "issues": [],
+                    "improvement_suggestions": [],
+                    "pass_or_fail": "pass",
+                },
+            },
+        )
 
 
 if __name__ == "__main__":

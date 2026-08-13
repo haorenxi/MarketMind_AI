@@ -17,12 +17,14 @@ class AgentState(TypedDict, total=False):
     skill_name: str
     skill_prompt: str
     plan: dict[str, Any]
+    task_type: str
     current_step: str | None
     completed_steps: Annotated[list[str], operator.add]
     messages: Annotated[list[AnyMessage], add_messages]
     sources: Annotated[list[dict[str, Any]], operator.add]
     search_results: Annotated[list[dict[str, Any]], operator.add]
     evidence: Annotated[list[dict[str, Any]], operator.add]
+    score: dict[str, Any] | None
     errors: Annotated[list[str], operator.add]
     research: str
     output: str

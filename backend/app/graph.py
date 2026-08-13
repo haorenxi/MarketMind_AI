@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -20,12 +21,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.agents import build_report_prompt, build_research_prompt, generate_research_plan
+from app.agents import build_report_prompt, build_research_prompt, classify_task_type, generate_research_plan
+from app.agents import fallback_report_score, generate_report_score
 from app.evidence import evidence_from_search_result, evidence_to_dict, unique_records_by_url
+from app.report_format import append_sources_appendix, build_fallback_markdown_report, normalize_markdown_report
 from app.state import AgentState
 from tools.search import ResearchTool, SearchResult, SearchToolError
 
 from .skill_loader import SkillLoader
+
+MAX_SEARCH_ROUNDS = int(os.getenv("MAX_SEARCH_ROUNDS", "3"))
 
 
 def _build_model() -> ChatOpenAI:
@@ -67,12 +72,15 @@ def prepare_context_node(state: AgentState) -> AgentState:
 
     task_id = state.get("task_id") or uuid.uuid4().hex
     skill = SkillLoader().load("company_research")
+    task_type = str(state.get("task_type") or classify_task_type(state["user_input"]))
     return {
         "task_id": task_id,
         "skill_name": skill.name,
         "skill_prompt": skill.content,
+        "task_type": task_type,
         "messages": [HumanMessage(content=state["user_input"])],
         "completed_steps": [],
+        "search_rounds": 0,
         "sources": [],
         "search_results": [],
         "evidence": [],
@@ -104,16 +112,7 @@ def _default_report(state: AgentState, reason: str) -> str:
     plan = _normalize_plan(state.get("plan"))
     evidence_context = list(state.get("evidence", [])) or list(state.get("search_results", []))
     title = plan.get("objective") or "comprehensive research"
-    evidence_summary = json.dumps(evidence_context, ensure_ascii=False, indent=2)
-    error_block = f"\n\n> Fallback reason: {reason}" if reason else ""
-    return (
-        f"# {title}\n\n"
-        "The report generator could not complete the full LLM drafting step, so "
-        "this fallback report is being returned to keep the API stable.\n\n"
-        "## Evidence\n\n"
-        f"```json\n{evidence_summary}\n```"
-        f"{error_block}"
-    )
+    return build_fallback_markdown_report(title=title, reason=reason, evidence=evidence_context)
 
 
 def _next_step_id(plan: dict[str, Any], completed_steps: list[str], current_step: str | None) -> str | None:
@@ -138,6 +137,7 @@ def planner_node_factory(model: ChatOpenAI):
             first_step = plan.steps[0].id if plan.steps else None
             return {
                 "plan": plan_dict,
+                "task_type": plan.task_type or classify_task_type(state["user_input"]),
                 "current_step": first_step,
                 "completed_steps": [],
             }
@@ -145,6 +145,7 @@ def planner_node_factory(model: ChatOpenAI):
             fallback_plan = _normalize_plan(None)
             return {
                 "plan": fallback_plan,
+                "task_type": classify_task_type(state["user_input"]),
                 "current_step": fallback_plan["steps"][0]["id"],
                 "completed_steps": [],
                 "errors": [f"planner failed: {error}"],
@@ -158,6 +159,17 @@ def research_agent_node_factory(model: ChatOpenAI):
 
     def research_agent_node(state: AgentState) -> AgentState:
         try:
+            if int(state.get("search_rounds", 0) or 0) >= MAX_SEARCH_ROUNDS:
+                return {
+                    "messages": [
+                        AIMessage(
+                            content=(
+                                "Search limit reached. I have enough context to draft the final report "
+                                "without further tool calls."
+                            )
+                        )
+                    ]
+                }
             prompt = build_research_prompt(
                 skill_prompt=state["skill_prompt"],
                 user_input=state["user_input"],
@@ -216,6 +228,16 @@ def route_after_research(state: AgentState) -> Literal["research_tool", "report"
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
         return "research_tool"
     return "report"
+
+
+def route_after_evidence(state: AgentState) -> Literal["research_agent", "report"]:
+    """Stop the research loop once enough search rounds have been completed."""
+
+    if int(state.get("search_rounds", 0) or 0) >= MAX_SEARCH_ROUNDS:
+        return "report"
+    if not state.get("current_step"):
+        return "report"
+    return "research_agent"
 
 
 def evidence_node(state: AgentState) -> AgentState:
@@ -281,6 +303,7 @@ def evidence_node(state: AgentState) -> AgentState:
             "evidence": evidence_records,
             "completed_steps": [current_step] if current_step else [],
             "current_step": next_step,
+            "search_rounds": int(state.get("search_rounds", 0) or 0) + 1,
         }
         return updates
     except Exception as error:
@@ -307,9 +330,12 @@ def report_node_factory(model: ChatOpenAI):
                 plan=plan,
                 evidence=evidence_context,
                 sources=sources_context,
+                task_type=str(state.get("task_type") or classify_task_type(state["user_input"])),
             )
             response = model.invoke(prompt)
-            return {"research": str(response.content)}
+            report_markdown = normalize_markdown_report(str(response.content), title=plan.get("objective") or "Research Report")
+            report_markdown = append_sources_appendix(report_markdown, sources_context)
+            return {"research": report_markdown}
         except Exception as error:
             fallback = _default_report(state, f"report generation failed: {error}")
             return {
@@ -319,6 +345,28 @@ def report_node_factory(model: ChatOpenAI):
             }
 
     return report_node
+
+
+def scorer_node_factory(model: ChatOpenAI):
+    """Create the scoring node so the final report can be evaluated."""
+
+    def scorer_node(state: AgentState) -> AgentState:
+        try:
+            score = generate_report_score(
+                model,
+                skill_prompt=state["skill_prompt"],
+                user_input=state["user_input"],
+                plan=_normalize_plan(state.get("plan")),
+                evidence=list(state.get("evidence", [])) or list(state.get("search_results", [])),
+                report_markdown=str(state.get("research", "")),
+            )
+            return {"score": score.model_dump()}
+        except Exception as error:
+            fallback_score = fallback_report_score().model_dump()
+            fallback_score["issues"] = list(fallback_score.get("issues", [])) + [f"score generation failed: {error}"]
+            return {"score": fallback_score, "errors": [f"score generation failed: {error}"]}
+
+    return scorer_node
 
 
 def output_node(state: AgentState) -> AgentState:
@@ -336,6 +384,7 @@ def build_agent_graph(model: ChatOpenAI | None = None):
     workflow.add_node("research_tool", safe_research_tool_node)
     workflow.add_node("evidence", evidence_node)
     workflow.add_node("report", report_node_factory(graph_model))
+    workflow.add_node("scorer", scorer_node_factory(graph_model))
     workflow.add_node("output", output_node)
     workflow.add_edge(START, "prepare_context")
     workflow.add_edge("prepare_context", "planner_node")
@@ -346,8 +395,13 @@ def build_agent_graph(model: ChatOpenAI | None = None):
         {"research_tool": "research_tool", "report": "report"},
     )
     workflow.add_edge("research_tool", "evidence")
-    workflow.add_edge("evidence", "research_agent")
-    workflow.add_edge("report", "output")
+    workflow.add_conditional_edges(
+        "evidence",
+        route_after_evidence,
+        {"research_agent": "research_agent", "report": "report"},
+    )
+    workflow.add_edge("report", "scorer")
+    workflow.add_edge("scorer", "output")
     workflow.add_edge("output", END)
     return workflow.compile()
 
