@@ -13,7 +13,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://market-mind-ai-peach.vercel.app",
+        "https://market-mind-ai-git-main-haorenxi-demo.vercel.app/",
         "https://agent.haorenxi.top",
 
         ],
