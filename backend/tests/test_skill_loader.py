@@ -7,9 +7,9 @@ from app.skill_loader import SkillLoader
 
 class SkillLoaderTests(unittest.TestCase):
     def test_loads_company_research_skill_verbatim(self) -> None:
-        skill = SkillLoader().load("company_research")
+        skill = SkillLoader().load("company-research")
 
-        self.assertEqual(skill.name, "company_research")
+        self.assertEqual(skill.name, "company-research")
         self.assertEqual(skill.path.name, "SKILL.md")
         self.assertTrue(skill.content.startswith("---"))
         self.assertIn("company-research", skill.content)

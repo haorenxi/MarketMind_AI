@@ -105,7 +105,7 @@ produces a score payload.
 ## Skill Loader
 
 `backend/app/skill_loader.py` loads `skills/<skill_name>/SKILL.md` verbatim.
-The `company_research` skill is kept unchanged.
+The application uses the installable `company-research` skill as its research-method source of truth.
 
 ## Testing
 
