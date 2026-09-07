@@ -18,7 +18,8 @@ body {
 }
 
 button,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -93,6 +94,21 @@ textarea {
   line-height: 1.6;
 }
 
+.input-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 0.8fr);
+  gap: 18px;
+}
+
+select {
+  width: 100%;
+  padding: 14px;
+  color: inherit;
+  background: #0e1116;
+  border: 1px solid #3a4758;
+  border-radius: 14px;
+}
+
 button {
   margin-top: 14px;
   padding: 12px 18px;
@@ -125,6 +141,95 @@ button:disabled {
   display: grid;
   gap: 16px;
 }
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #2a3442;
+  background: #0e1116;
+}
+
+.kpi-card span,
+.kpi-card small {
+  color: #aab6c5;
+}
+
+.kpi-card strong {
+  color: #72d6b1;
+  font-size: 1.18rem;
+}
+
+.trend-chart {
+  overflow-x: auto;
+}
+
+.trend-chart svg {
+  width: 100%;
+  min-width: 520px;
+  color: #aab6c5;
+}
+
+.trend-chart text {
+  fill: currentColor;
+  font-size: 12px;
+}
+
+.chart-caption {
+  color: #8fa3bb;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.validation-panel {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #2a3442;
+}
+
+.warning-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #f6c177;
+  display: grid;
+  gap: 8px;
+}
+
+.claim-list {
+  display: grid;
+  gap: 8px;
+}
+
+.claim-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #2a3442;
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: rgba(17, 23, 34, 0.82);
+}
+
+.claim-card small,
+.claim-card span {
+  color: #aab6c5;
+}
+
+.claim-card a {
+  color: #72d6b1;
+}
+
+.claim-verified { border-left-color: #72d6b1; }
+.claim-warning { border-left-color: #f6c177; }
+.claim-failed { border-left-color: #ff9b9b; }
 
 .result-card,
 .score-card {
@@ -368,5 +473,10 @@ button:disabled {
 
   .hero-card {
     padding: 24px;
+  }
+
+  .input-grid,
+  .kpi-grid {
+    grid-template-columns: 1fr;
   }
 }

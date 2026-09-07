@@ -20,7 +20,10 @@ User Input
   -> research_agent
   -> search_tool
   -> evidence
+  -> metric_extractor
+  -> market_analysis
   -> report
+  -> validation_agent
   -> scorer
   -> output
 ```
@@ -77,7 +80,8 @@ Request:
 
 ```json
 {
-  "message": "Analyze the robot vision sensor market"
+  "message": "Analyze the robot vision sensor market",
+  "research_type": "market_size"
 }
 ```
 
@@ -87,6 +91,22 @@ Response:
 {
   "answer": "markdown report",
   "research": "markdown report",
+  "research_type": "market_size",
+  "metrics": [],
+  "calculated_metrics": [],
+  "time_series": [],
+  "competitors": [],
+  "warnings": [],
+  "validation": {
+    "accuracy_score": 0,
+    "applicability_score": 0,
+    "citation_coverage": 0,
+    "cross_source_rate": 0,
+    "status": "warning",
+    "applicability": "scope statement",
+    "claims": [],
+    "warnings": []
+  },
   "score": {
     "score": 88,
     "dimension_scores": {
@@ -101,6 +121,25 @@ Response:
 
 `score` is optional in the API response, but it is now exposed when the graph
 produces a score payload.
+
+Supported `research_type` values are `comprehensive`, `market_size`,
+`competitor`, `product_price`, `customer_demand`, `supply_chain`, and
+`market_entry`. Requests containing only `message` remain valid.
+
+## Market Data Validation
+
+The backend extracts traceable numeric metrics, calculates CAGR in deterministic
+Python code, and checks citation coverage, numeric presence in collected evidence,
+cross-source agreement, and applicability scope. The first implementation uses
+search snippets, so the UI explicitly warns that its score is not a full-page or
+human fact check.
+
+With the API running, execute the reusable seven-category evaluation suite:
+
+```bash
+cd backend
+.\.venv\Scripts\python.exe evals\runner.py --runs 3
+```
 
 ## Skill Loader
 

@@ -87,7 +87,7 @@ def build_default_research_plan(user_input: str | None = None) -> ResearchPlan:
     )
 
 
-def build_planner_prompt(skill_prompt: str, user_input: str) -> list[Any]:
+def build_planner_prompt(skill_prompt: str, user_input: str, research_type: str = "comprehensive") -> list[Any]:
     """Create the structured planning prompt."""
 
     system_message = SystemMessage(
@@ -100,6 +100,8 @@ def build_planner_prompt(skill_prompt: str, user_input: str) -> list[Any]:
             "Use the task type to shape the plan and the later report structure.\n\n"
             "The plan must be specific enough for a downstream executor to decide which searches to run "
             "and which evidence to collect.\n\n"
+            f"The user selected research type '{research_type}'. Treat it as authoritative and shape the plan "
+            "around the corresponding required evidence.\n\n"
             "<skill name=\"company_research\">\n"
             f"{skill_prompt}\n"
             "</skill>"
@@ -159,6 +161,7 @@ def build_report_prompt(
     evidence: list[dict[str, Any]],
     sources: list[dict[str, Any]],
     task_type: str = "general",
+    market_data: dict[str, Any] | None = None,
 ) -> list[Any]:
     """Create the Markdown report prompt."""
 
@@ -166,6 +169,10 @@ def build_report_prompt(
         "competitor": ["Competitor Landscape", "Product Comparison", "Differentiation", "Pricing", "Channel Strategy"],
         "product": ["Market Size", "Demand Drivers", "Product Segments", "Pricing", "Use Cases"],
         "supply_chain": ["Chain Structure", "Upstream", "Midstream", "Downstream", "Key Risks", "Bottlenecks"],
+        "market_size": ["Market Size", "Growth Rate", "Historical Trend", "Forecast", "Regional Scope"],
+        "product_price": ["Product Segments", "Models", "Features", "Pricing", "Target Customers"],
+        "customer_demand": ["Customer Segments", "Needs", "Pain Points", "Review Signals", "Buying Factors"],
+        "market_entry": ["Market Size", "Customer Segments", "Competition", "Entry Barriers", "Channels", "Risks"],
         "general": [
             "Market Size",
             "Major Brands",
@@ -192,6 +199,9 @@ def build_report_prompt(
             "- Prefer short paragraphs, bullet lists, and tables where useful.\n"
             "- Cite URLs inline when making factual claims.\n"
             "- Separate facts from inferences.\n"
+            "- Use deterministic calculated_metrics for CAGR or growth figures; do not recalculate them.\n"
+            "- Mark forecast values as forecasts and state the geography, period, and segment.\n"
+            "- Add a Data Limitations subsection when structured warnings are present.\n"
             "- Do not wrap the report in code fences.\n"
             "- Do not output HTML comments or non-Markdown boilerplate.\n\n"
             "Recommended report structure:\n"
@@ -216,7 +226,10 @@ def build_report_prompt(
             "</evidence>\n\n"
             "<sources>\n"
             f"{json.dumps(sources, ensure_ascii=False)}\n"
-            "</sources>"
+            "</sources>\n\n"
+            "<structured_market_data>\n"
+            f"{json.dumps(market_data or {}, ensure_ascii=False)}\n"
+            "</structured_market_data>"
         )
     )
     human_message = HumanMessage(content=user_input)
@@ -249,13 +262,20 @@ def coerce_research_plan(value: Any, user_input: str | None = None) -> ResearchP
         return build_default_research_plan(user_input)
 
 
-def generate_research_plan(model: Any, user_input: str, skill_prompt: str) -> ResearchPlan:
+def generate_research_plan(
+    model: Any,
+    user_input: str,
+    skill_prompt: str,
+    research_type: str = "comprehensive",
+) -> ResearchPlan:
     """Generate a structured plan with a safe fallback."""
 
     try:
         structured_model = model.with_structured_output(ResearchPlan)
-        result = structured_model.invoke(build_planner_prompt(skill_prompt, user_input))
+        result = structured_model.invoke(build_planner_prompt(skill_prompt, user_input, research_type))
         plan = coerce_research_plan(result, user_input)
+        if research_type != "comprehensive":
+            plan.task_type = research_type
         if not plan.task_type:
             plan.task_type = classify_task_type(user_input)
         return plan

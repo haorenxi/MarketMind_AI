@@ -21,9 +21,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.agents import build_report_prompt, build_research_prompt, classify_task_type, generate_research_plan
+from app.agents import build_report_prompt, build_research_prompt, classify_task_type, extract_market_data, generate_research_plan
 from app.agents import fallback_report_score, generate_report_score
 from app.evidence import evidence_from_search_result, evidence_to_dict, unique_records_by_url
+from app.market_data import MarketMetric, analyze_market_metrics, validate_market_data
 from app.report_format import append_sources_appendix, build_fallback_markdown_report, normalize_markdown_report
 from app.state import AgentState
 from tools.search import ResearchTool, SearchResult, SearchToolError
@@ -73,17 +74,24 @@ def prepare_context_node(state: AgentState) -> AgentState:
     task_id = state.get("task_id") or uuid.uuid4().hex
     skill = SkillLoader().load("company_research")
     task_type = str(state.get("task_type") or classify_task_type(state["user_input"]))
+    research_type = str(state.get("research_type") or "comprehensive")
     return {
         "task_id": task_id,
         "skill_name": skill.name,
         "skill_prompt": skill.content,
         "task_type": task_type,
+        "research_type": research_type,
         "messages": [HumanMessage(content=state["user_input"])],
         "completed_steps": [],
         "search_rounds": 0,
         "sources": [],
         "search_results": [],
         "evidence": [],
+        "market_metrics": [],
+        "calculated_metrics": [],
+        "time_series": [],
+        "competitors": [],
+        "data_warnings": [],
         "errors": [],
     }
 
@@ -132,7 +140,12 @@ def planner_node_factory(model: ChatOpenAI):
 
     def planner_node(state: AgentState) -> AgentState:
         try:
-            plan = generate_research_plan(model, state["user_input"], state["skill_prompt"])
+            plan = generate_research_plan(
+                model,
+                state["user_input"],
+                state["skill_prompt"],
+                str(state.get("research_type") or "comprehensive"),
+            )
             plan_dict = plan.model_dump()
             first_step = plan.steps[0].id if plan.steps else None
             return {
@@ -221,23 +234,69 @@ def safe_research_tool_node(state: AgentState) -> AgentState:
     return {"messages": tool_messages}
 
 
-def route_after_research(state: AgentState) -> Literal["research_tool", "report"]:
+def route_after_research(state: AgentState) -> Literal["research_tool", "metric_extractor"]:
     """Route to ToolNode only when the model requested a tool call."""
 
     last_message = state["messages"][-1]
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
         return "research_tool"
-    return "report"
+    return "metric_extractor"
 
 
-def route_after_evidence(state: AgentState) -> Literal["research_agent", "report"]:
+def route_after_evidence(state: AgentState) -> Literal["research_agent", "metric_extractor"]:
     """Stop the research loop once enough search rounds have been completed."""
 
     if int(state.get("search_rounds", 0) or 0) >= MAX_SEARCH_ROUNDS:
-        return "report"
+        return "metric_extractor"
     if not state.get("current_step"):
-        return "report"
+        return "metric_extractor"
     return "research_agent"
+
+
+def metric_extractor_node_factory(model: ChatOpenAI):
+    """Create structured numeric market data from collected evidence."""
+
+    def metric_extractor_node(state: AgentState) -> AgentState:
+        extraction = extract_market_data(
+            model,
+            state["user_input"],
+            str(state.get("research_type") or "comprehensive"),
+            list(state.get("evidence", [])),
+        )
+        return {
+            "market_metrics": [item.model_dump() for item in extraction.metrics],
+            "competitors": [item.model_dump() for item in extraction.competitors],
+            "data_warnings": extraction.warnings,
+        }
+
+    return metric_extractor_node
+
+
+def market_analysis_node(state: AgentState) -> AgentState:
+    """Run deterministic calculations and prepare chart-ready data."""
+
+    metrics: list[MarketMetric] = []
+    warnings: list[str] = []
+    for item in state.get("market_metrics", []):
+        try:
+            metrics.append(MarketMetric.model_validate(item))
+        except Exception as error:
+            warnings.append(f"忽略了一个无效市场指标: {error}")
+    normalized, calculated, time_series, analysis_warnings = analyze_market_metrics(metrics)
+    return {
+        "market_metrics": [item.model_dump() for item in normalized],
+        "calculated_metrics": [item.model_dump() for item in calculated],
+        "time_series": [item.model_dump() for item in time_series],
+        "data_warnings": warnings + analysis_warnings,
+    }
+
+
+def validation_agent_node(state: AgentState) -> AgentState:
+    """Validate citations and declared applicability with explainable rules."""
+
+    metrics = [MarketMetric.model_validate(item) for item in state.get("market_metrics", [])]
+    result = validate_market_data(metrics, list(state.get("evidence", [])))
+    return {"validation": result.model_dump(), "data_warnings": result.warnings}
 
 
 def evidence_node(state: AgentState) -> AgentState:
@@ -331,6 +390,13 @@ def report_node_factory(model: ChatOpenAI):
                 evidence=evidence_context,
                 sources=sources_context,
                 task_type=str(state.get("task_type") or classify_task_type(state["user_input"])),
+                market_data={
+                    "metrics": state.get("market_metrics", []),
+                    "calculated_metrics": state.get("calculated_metrics", []),
+                    "time_series": state.get("time_series", []),
+                    "competitors": state.get("competitors", []),
+                    "warnings": state.get("data_warnings", []),
+                },
             )
             response = model.invoke(prompt)
             report_markdown = normalize_markdown_report(str(response.content), title=plan.get("objective") or "Research Report")
@@ -383,7 +449,10 @@ def build_agent_graph(model: ChatOpenAI | None = None):
     workflow.add_node("research_agent", research_agent_node_factory(graph_model))
     workflow.add_node("research_tool", safe_research_tool_node)
     workflow.add_node("evidence", evidence_node)
+    workflow.add_node("metric_extractor", metric_extractor_node_factory(graph_model))
+    workflow.add_node("market_analysis", market_analysis_node)
     workflow.add_node("report", report_node_factory(graph_model))
+    workflow.add_node("validation_agent", validation_agent_node)
     workflow.add_node("scorer", scorer_node_factory(graph_model))
     workflow.add_node("output", output_node)
     workflow.add_edge(START, "prepare_context")
@@ -392,15 +461,18 @@ def build_agent_graph(model: ChatOpenAI | None = None):
     workflow.add_conditional_edges(
         "research_agent",
         route_after_research,
-        {"research_tool": "research_tool", "report": "report"},
+        {"research_tool": "research_tool", "metric_extractor": "metric_extractor"},
     )
     workflow.add_edge("research_tool", "evidence")
     workflow.add_conditional_edges(
         "evidence",
         route_after_evidence,
-        {"research_agent": "research_agent", "report": "report"},
+        {"research_agent": "research_agent", "metric_extractor": "metric_extractor"},
     )
-    workflow.add_edge("report", "scorer")
+    workflow.add_edge("metric_extractor", "market_analysis")
+    workflow.add_edge("market_analysis", "report")
+    workflow.add_edge("report", "validation_agent")
+    workflow.add_edge("validation_agent", "scorer")
     workflow.add_edge("scorer", "output")
     workflow.add_edge("output", END)
     return workflow.compile()

@@ -12,6 +12,7 @@ from .planner import (
     generate_research_plan,
 )
 from .scorer import ReportScore, build_scoring_prompt, fallback_report_score, generate_report_score
+from .market import build_market_extraction_prompt, extract_market_data
 
 __all__ = [
     "DEFAULT_RESEARCH_PLAN",
@@ -27,4 +28,6 @@ __all__ = [
     "build_scoring_prompt",
     "fallback_report_score",
     "generate_report_score",
+    "build_market_extraction_prompt",
+    "extract_market_data",
 ]

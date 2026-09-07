@@ -26,7 +26,7 @@ def health_check() -> dict[str, str]:
 @app.post("/api/agent", response_model=AgentResponse)
 def run_agent(request: AgentRequest) -> AgentResponse:
     try:
-        result = agent_graph.invoke({"user_input": request.message})
+        result = agent_graph.invoke({"user_input": request.message, "research_type": request.research_type.value})
         score = result.get("score") if isinstance(result, dict) else None
         return AgentResponse(
             answer=result["output"],
@@ -34,6 +34,14 @@ def run_agent(request: AgentRequest) -> AgentResponse:
             score=score,
             score_status=score.get("score_status") if isinstance(score, dict) else None,
             score_error=score.get("score_error") if isinstance(score, dict) else None,
+            research_type=request.research_type,
+            metrics=result.get("market_metrics", []),
+            calculated_metrics=result.get("calculated_metrics", []),
+            time_series=result.get("time_series", []),
+            competitors=result.get("competitors", []),
+            sources=result.get("sources", []),
+            warnings=result.get("data_warnings", []),
+            validation=result.get("validation"),
         )
     except Exception as error:
         logger.exception("Agent execution failed: %s", error)
@@ -42,4 +50,12 @@ def run_agent(request: AgentRequest) -> AgentResponse:
             "# Report Unavailable\n\n"
             "The research workflow failed unexpectedly, but the API stayed up."
         )
-        return AgentResponse(answer=fallback, research=fallback, score=None, score_status="fallback_scored", score_error=str(error))
+        return AgentResponse(
+            answer=fallback,
+            research=fallback,
+            score=None,
+            score_status="fallback_scored",
+            score_error=str(error),
+            research_type=request.research_type,
+            warnings=["调研工作流执行失败，本次结果不可作为市场决策依据。"],
+        )

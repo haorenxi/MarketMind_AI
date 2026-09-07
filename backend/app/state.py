@@ -18,12 +18,19 @@ class AgentState(TypedDict, total=False):
     skill_prompt: str
     plan: dict[str, Any]
     task_type: str
+    research_type: str
     current_step: str | None
     completed_steps: Annotated[list[str], operator.add]
     messages: Annotated[list[AnyMessage], add_messages]
     sources: Annotated[list[dict[str, Any]], operator.add]
     search_results: Annotated[list[dict[str, Any]], operator.add]
     evidence: Annotated[list[dict[str, Any]], operator.add]
+    market_metrics: list[dict[str, Any]]
+    calculated_metrics: list[dict[str, Any]]
+    time_series: list[dict[str, Any]]
+    competitors: list[dict[str, Any]]
+    data_warnings: Annotated[list[str], operator.add]
+    validation: dict[str, Any] | None
     score: dict[str, Any] | None
     errors: Annotated[list[str], operator.add]
     research: str
