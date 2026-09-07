@@ -1,0 +1,7 @@
+interface:
+  display_name: "Company Research"
+  short_description: "Produce sourced company and market intelligence"
+  default_prompt: "Use $company-research to investigate a company or market and produce a sourced decision-ready report."
+
+policy:
+  allow_implicit_invocation: true

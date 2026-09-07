@@ -100,9 +100,13 @@ def build_planner_prompt(skill_prompt: str, user_input: str, research_type: str 
             "Use the task type to shape the plan and the later report structure.\n\n"
             "The plan must be specific enough for a downstream executor to decide which searches to run "
             "and which evidence to collect.\n\n"
+<<<<<<< HEAD
             f"The user selected research type '{research_type}'. Treat it as authoritative and shape the plan "
             "around the corresponding required evidence.\n\n"
             "<skill name=\"company_research\">\n"
+=======
+            "<skill name=\"company-research\">\n"
+>>>>>>> d0bf5620d783d6f28e0e22dd8ef37927f5db54b8
             f"{skill_prompt}\n"
             "</skill>"
         )
@@ -133,7 +137,7 @@ def build_research_prompt(
             "only when it helps gather fresh or externally verifiable facts. Stop calling tools when "
             "the collected evidence is sufficient to draft the final report.\n\n"
             "Always consider the plan, the current step, the completed steps, and the evidence already collected.\n\n"
-            "<skill name=\"company_research\">\n"
+            "<skill name=\"company-research\">\n"
             f"{skill_prompt}\n"
             "</skill>\n\n"
             "<plan>\n"
@@ -215,7 +219,7 @@ def build_report_prompt(
             f"Task type: {task_type}\n"
             "Inside Facts, organize content using these sections when useful:\n"
             f"{chr(10).join(f'- {section}' for section in sections)}\n\n"
-            "<skill name=\"company_research\">\n"
+            "<skill name=\"company-research\">\n"
             f"{skill_prompt}\n"
             "</skill>\n\n"
             "<plan>\n"

@@ -72,7 +72,7 @@ def prepare_context_node(state: AgentState) -> AgentState:
     """Load the unchanged company-research skill and initialize workflow state."""
 
     task_id = state.get("task_id") or uuid.uuid4().hex
-    skill = SkillLoader().load("company_research")
+    skill = SkillLoader().load("company-research")
     task_type = str(state.get("task_type") or classify_task_type(state["user_input"]))
     research_type = str(state.get("research_type") or "comprehensive")
     return {

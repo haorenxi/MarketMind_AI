@@ -90,7 +90,7 @@ type SourceItem = {
   source?: string;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 function escapeHtml(text: string) {
   return text
@@ -288,7 +288,7 @@ export default function Home() {
       if (!response.ok) throw new Error("Agent request failed");
       setResult(await response.json());
     } catch {
-      setError("Unable to reach the backend. Please make sure FastAPI is running at http://localhost:8000.");
+      setError("Unable to reach the backend. Please verify the API address and try again.");
     } finally {
       setLoading(false);
     }
