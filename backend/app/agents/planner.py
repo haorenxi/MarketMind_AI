@@ -100,13 +100,9 @@ def build_planner_prompt(skill_prompt: str, user_input: str, research_type: str 
             "Use the task type to shape the plan and the later report structure.\n\n"
             "The plan must be specific enough for a downstream executor to decide which searches to run "
             "and which evidence to collect.\n\n"
-<<<<<<< HEAD
             f"The user selected research type '{research_type}'. Treat it as authoritative and shape the plan "
             "around the corresponding required evidence.\n\n"
-            "<skill name=\"company_research\">\n"
-=======
             "<skill name=\"company-research\">\n"
->>>>>>> d0bf5620d783d6f28e0e22dd8ef37927f5db54b8
             f"{skill_prompt}\n"
             "</skill>"
         )
