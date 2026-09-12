@@ -408,11 +408,6 @@ export default function Home() {
                 </article>
               )}
 
-              <article className="result-card">
-                <h2>Report Summary</h2>
-                <div className="markdown-body">{renderMarkdownBlock(result.answer)}</div>
-              </article>
-
               {reportSections && (
                 <>
                   <ReportSectionCard title="Facts" content={reportSections.facts} />
